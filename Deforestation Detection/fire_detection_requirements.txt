@@ -1,0 +1,10 @@
+streamlit
+numpy
+pandas
+scikit-learn>=1.0.0
+joblib
+folium
+streamlit-folium
+geopy
+imbalanced-learn
+openpyxl  # For Excel file handling

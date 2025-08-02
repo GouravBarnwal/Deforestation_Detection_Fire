@@ -1,6 +1,6 @@
 streamlit==1.35.0
 pandas==2.2.2
-numpy==2.0.0
+numpy==1.26.4
 joblib==1.4.0
 scikit-learn==1.4.1.post1
 requests==2.31.0
@@ -10,3 +10,4 @@ gitpython==3.1.43
 openpyxl==3.1.2
 geopy==2.4.1
 --find-links https://download.pytorch.org/whl/torch_stable.html
+

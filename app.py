@@ -9,6 +9,27 @@ from streamlit_folium import st_folium
 from sklearn.ensemble import RandomForestClassifier
 from geopy.distance import geodesic
 import io
+import os
+import requests
+
+# === 🔽 Helper: Download large files from Google Drive ===
+def download_if_missing(url, filename):
+    if not os.path.exists(filename):
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(filename, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+@st.cache_resource
+def ensure_dependencies():
+    download_if_missing("https://drive.google.com/uc?export=download&id=1JvbfPY6bq4HD4oOVyCUEMoya--eSB7Qd", "best_fire_detection_model.pkl")
+    download_if_missing("https://drive.google.com/uc?export=download&id=18FjzK0oepVCJ43hUOuXK79bzUEY6bOk_", "scaler.pkl")
+    download_if_missing("https://drive.google.com/uc?export=download&id=1YDI0vHvY0K-jQzikS1TwUfrEnw1d2bUR", "modis_2021_India.csv")
+    download_if_missing("https://drive.google.com/uc?export=download&id=169g0t79z5ZaiaNDsvS9_nt6nx6y8kfz0", "modis_2022_India.csv")
+    download_if_missing("https://drive.google.com/uc?export=download&id=16hEC1Q9wxSyGVqYa-JmwGPv9Zw9fDPNE", "modis_2023_India.csv")
+
+ensure_dependencies()
 
 @st.cache_resource
 def load_model():

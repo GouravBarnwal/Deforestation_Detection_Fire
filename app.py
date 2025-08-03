@@ -11,24 +11,99 @@ from geopy.distance import geodesic
 import io
 import os
 import requests
+from pathlib import Path
+
+# Load secrets
+GDRIVE_BASE_URL = "https://drive.google.com/uc?export=download&id="
 
 # === 🔽 Helper: Download large files from Google Drive ===
 def download_if_missing(url, filename):
-    if not os.path.exists(filename):
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(filename, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
+    try:
+        if not os.path.exists(filename):
+            # Create directory if it doesn't exist
+            Path(filename).parent.mkdir(parents=True, exist_ok=True)
+            
+            # For Google Drive links, handle the virus scan warning
+            if 'drive.google.com' in url:
+                response = requests.get(url, stream=True, timeout=30)
+                
+                # Handle Google Drive's virus scan warning
+                for key, value in response.cookies.items():
+                    if 'download_warning' in key:
+                        params = {'confirm': value, 'id': url.split('id=')[-1]}
+                        response = requests.get('https://drive.google.com/uc', params=params, stream=True)
+                        break
+                
+                response.raise_for_status()
+                
+                # Save the file with progress
+                total_size = int(response.headers.get('content-length', 0))
+                block_size = 8192
+                progress_bar = st.progress(0)
+                downloaded_size = 0
+                
+                with open(filename, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=block_size):
+                        if chunk:  # filter out keep-alive chunks
+                            f.write(chunk)
+                            downloaded_size += len(chunk)
+                            if total_size > 0:
+                                progress = min(100, int((downloaded_size / total_size) * 100))
+                                progress_bar.progress(progress)
+                
+                progress_bar.empty()
+                return True
+            
+            # For direct URLs
+            else:
+                with requests.get(url, stream=True, timeout=30) as r:
+                    r.raise_for_status()
+                    with open(filename, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if chunk:  # filter out keep-alive chunks
+                                f.write(chunk)
+                return True
+        return False
+    except Exception as e:
+        st.error(f"Error downloading {filename}: {str(e)}")
+        return False
+
+def get_gdrive_url(file_id):
+    return f"{GDRIVE_BASE_URL}{file_id}"
 
 @st.cache_resource
 def ensure_dependencies():
-    download_if_missing("https://drive.google.com/uc?export=download&id=1JvbfPY6bq4HD4oOVyCUEMoya--eSB7Qd", "models/best_fire_detection_model.pkl")
-    download_if_missing("https://drive.google.com/uc?export=download&id=18FjzK0oepVCJ43hUOuXK79bzUEY6bOk_", "models/scaler.pkl")
-    download_if_missing("https://drive.google.com/uc?export=download&id=1YDI0vHvY0K-jQzikS1TwUfrEnw1d2bUR", "data/modis_2021_India.csv")
-    download_if_missing("https://drive.google.com/uc?export=download&id=169g0t79z5ZaiaNDsvS9_nt6nx6y8kfz0", "data/modis_2022_India.csv")
-    download_if_missing("https://drive.google.com/uc?export=download&id=16hEC1Q9wxSyGVqYa-JmwGPv9Zw9fDPNE", "data/modis_2023_India.csv")
+    try:
+        # Get file IDs from secrets
+        secrets = st.secrets.get("gdrive", {})
+        
+        # Define files to download with their paths and IDs
+        files_to_download = [
+            ("models/best_fire_detection_model.pkl", secrets.get("model_id")),
+            ("models/scaler.pkl", secrets.get("scaler_id")),
+            ("data/modis_2021_India.csv", secrets.get("data_2021_id")),
+            ("data/modis_2022_India.csv", secrets.get("data_2022_id")),
+            ("data/modis_2023_India.csv", secrets.get("data_2023_id"))
+        ]
+        
+        # Create necessary directories
+        os.makedirs('models', exist_ok=True)
+        os.makedirs('data', exist_ok=True)
+        
+        # Download files with progress
+        for filename, file_id in files_to_download:
+            if not file_id:
+                st.error(f"Missing file ID for {filename} in secrets")
+                continue
+                
+            url = get_gdrive_url(file_id)
+            with st.spinner(f"Downloading {os.path.basename(filename)}..."):
+                if not download_if_missing(url, filename):
+                    st.error(f"Failed to download {filename}")
+    except Exception as e:
+        st.error(f"Error in ensure_dependencies: {str(e)}")
 
+# Initialize dependencies
 ensure_dependencies()
 
 @st.cache_resource
@@ -42,12 +117,9 @@ def load_model():
                 st.error("Failed to download the model file. Please check your internet connection and try again.")
                 return None
         
-        model = joblib.load(model_path)
-        st.session_state.model_loaded = True
-        return model
+        return joblib.load(model_path)
     except Exception as e:
         st.error(f"Error loading the model: {str(e)}")
-        st.session_state.model_loaded = False
         return None
 
 @st.cache_resource

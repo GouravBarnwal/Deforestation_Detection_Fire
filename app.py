@@ -23,39 +23,75 @@ def download_if_missing(url, filename):
 
 @st.cache_resource
 def ensure_dependencies():
-    download_if_missing("https://drive.google.com/uc?export=download&id=1JvbfPY6bq4HD4oOVyCUEMoya--eSB7Qd", "best_fire_detection_model.pkl")
-    download_if_missing("https://drive.google.com/uc?export=download&id=18FjzK0oepVCJ43hUOuXK79bzUEY6bOk_", "scaler.pkl")
-    download_if_missing("https://drive.google.com/uc?export=download&id=1YDI0vHvY0K-jQzikS1TwUfrEnw1d2bUR", "modis_2021_India.csv")
-    download_if_missing("https://drive.google.com/uc?export=download&id=169g0t79z5ZaiaNDsvS9_nt6nx6y8kfz0", "modis_2022_India.csv")
-    download_if_missing("https://drive.google.com/uc?export=download&id=16hEC1Q9wxSyGVqYa-JmwGPv9Zw9fDPNE", "modis_2023_India.csv")
+    download_if_missing("https://drive.google.com/uc?export=download&id=1JvbfPY6bq4HD4oOVyCUEMoya--eSB7Qd", "models/best_fire_detection_model.pkl")
+    download_if_missing("https://drive.google.com/uc?export=download&id=18FjzK0oepVCJ43hUOuXK79bzUEY6bOk_", "models/scaler.pkl")
+    download_if_missing("https://drive.google.com/uc?export=download&id=1YDI0vHvY0K-jQzikS1TwUfrEnw1d2bUR", "data/modis_2021_India.csv")
+    download_if_missing("https://drive.google.com/uc?export=download&id=169g0t79z5ZaiaNDsvS9_nt6nx6y8kfz0", "data/modis_2022_India.csv")
+    download_if_missing("https://drive.google.com/uc?export=download&id=16hEC1Q9wxSyGVqYa-JmwGPv9Zw9fDPNE", "data/modis_2023_India.csv")
 
 ensure_dependencies()
 
 @st.cache_resource
 def load_model():
+    model_path = "models/best_fire_detection_model.pkl"
     try:
-        model = joblib.load("best_fire_detection_model.pkl")
+        if not os.path.exists(model_path):
+            st.warning("Model file not found. Attempting to download...")
+            ensure_dependencies()
+            if not os.path.exists(model_path):
+                st.error("Failed to download the model file. Please check your internet connection and try again.")
+                return None
+        
+        model = joblib.load(model_path)
         st.session_state.model_loaded = True
         return model
-    except FileNotFoundError:
+    except Exception as e:
+        st.error(f"Error loading the model: {str(e)}")
         st.session_state.model_loaded = False
         return None
 
 @st.cache_resource
 def load_scaler():
+    scaler_path = "models/scaler.pkl"
     try:
-        return joblib.load("scaler.pkl")
-    except FileNotFoundError:
+        if not os.path.exists(scaler_path):
+            st.warning("Scaler file not found. Attempting to download...")
+            ensure_dependencies()
+            if not os.path.exists(scaler_path):
+                st.error("Failed to download the scaler file. Please check your internet connection and try again.")
+                return None
+        return joblib.load(scaler_path)
+    except Exception as e:
+        st.error(f"Error loading the scaler: {str(e)}")
         return None
 
-@st.cache_data
+@st.cache_resource
 def load_all_years():
-    df_2021 = pd.read_csv("modis_2021_India.csv")
-    df_2022 = pd.read_csv("modis_2022_India.csv")
-    df_2023 = pd.read_csv("modis_2023_India.csv")
-    df = pd.concat([df_2021, df_2022, df_2023], ignore_index=True)
-    df.dropna(subset=["latitude", "longitude"], inplace=True)
-    return df
+    data_files = [
+        "data/modis_2021_India.csv",
+        "data/modis_2022_India.csv",
+        "data/modis_2023_India.csv"
+    ]
+    
+    # Check if all data files exist
+    missing_files = [f for f in data_files if not os.path.exists(f)]
+    if missing_files:
+        st.warning("Some data files are missing. Attempting to download...")
+        ensure_dependencies()
+        
+        # Check again after attempting download
+        missing_files = [f for f in data_files if not os.path.exists(f)]
+        if missing_files:
+            st.error(f"Failed to download the following data files: {', '.join(missing_files)}")
+            return None
+    
+    try:
+        df = pd.concat([pd.read_csv(f) for f in data_files], ignore_index=True)
+        df.dropna(subset=["latitude", "longitude"], inplace=True)
+        return df
+    except Exception as e:
+        st.error(f"Error loading data files: {str(e)}")
+        return None
 
 fire_types = {
     0: ("🌳 Vegetation Fire", "#28a745"),

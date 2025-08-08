@@ -8,9 +8,7 @@ from streamlit_folium import st_folium
 from sklearn.ensemble import RandomForestClassifier
 from geopy.distance import geodesic
 
-# ----------------------------
-# Load model and data
-# ----------------------------
+# ------------------ MODEL & SCALER LOAD ------------------
 @st.cache_resource
 def load_model():
     try:
@@ -37,9 +35,7 @@ def load_all_years():
     df.dropna(subset=["latitude", "longitude"], inplace=True)
     return df
 
-# ----------------------------
-# Config
-# ----------------------------
+# ------------------ FIRE TYPE MAP ------------------
 fire_types = {
     0: ("🌳 Vegetation Fire", "#28a745"),
     1: ("🔥 Industrial/Urban Fire", "#ffc107"),
@@ -48,10 +44,27 @@ fire_types = {
 }
 confidence_map = {"low": 0, "nominal": 1, "high": 2}
 
-# ----------------------------
-# Helper Functions
-# ----------------------------
-def find_closest_fire(df, lat, lon, radius_km=20):
+# ------------------ REAL FIRE TYPE INFERENCE ------------------
+def infer_fire_type_from_row(row, model, scaler):
+    try:
+        X = np.array([[
+            row['brightness'],
+            row['bright_t31'],
+            row['frp'],
+            row['scan'],
+            row['track'],
+            confidence_map.get(str(row['confidence']).lower(), 1)
+        ]])
+        X_scaled = scaler.transform(X)
+        pred = model.predict(X_scaled)[0]
+        label, _ = fire_types.get(pred, ("Unknown", "gray"))
+        if label == "🌳 Vegetation Fire" and (row["latitude"] <= 10.0 or row["longitude"] >= 92.0):
+            label = "🌊 Offshore Fire"
+        return label
+    except Exception:
+        return "Prediction Error"
+
+def find_closest_fire(df, lat, lon, model=None, scaler=None, radius_km=20):
     lat_min, lat_max = lat - 0.2, lat + 0.2
     lon_min, lon_max = lon - 0.2, lon + 0.2
     nearby = df[(df["latitude"].between(lat_min, lat_max)) & 
@@ -61,19 +74,21 @@ def find_closest_fire(df, lat, lon, radius_km=20):
     nearby["distance_km"] = nearby.apply(
         lambda row: geodesic((lat, lon), (row["latitude"], row["longitude"])).km, axis=1
     )
-    return nearby[nearby["distance_km"] <= radius_km].sort_values("distance_km")
+    nearby = nearby[nearby["distance_km"] <= radius_km].sort_values("distance_km")
+    if model and scaler:
+        nearby["inferred_fire_type"] = nearby.apply(
+            lambda row: infer_fire_type_from_row(row, model, scaler), axis=1
+        )
+    return nearby
 
+# ------------------ MAP DISPLAY ------------------
 def show_map(lat, lon, fire_label, color):
-    lat, lon = lat or 20.5937, lon or 78.9629
-    zoom = 6 if lat and lon else 4
-    m = folium.Map(location=[lat, lon], zoom_start=zoom)
-
+    m = folium.Map(location=[lat, lon], zoom_start=6)
     folium.Marker(
         [lat, lon],
         popup=f"{fire_label} at ({lat:.4f}, {lon:.4f})",
         icon=folium.Icon(color="red", icon="fire", prefix="fa")
     ).add_to(m)
-
     folium.Circle(
         [lat, lon],
         radius=50000,
@@ -82,7 +97,6 @@ def show_map(lat, lon, fire_label, color):
         fill_color=color,
         opacity=0.2
     ).add_to(m)
-
     title_html = f"""
         <div style="position: absolute; top: 10px; left: 50%;
                     transform: translateX(-50%); z-index:9999;
@@ -93,17 +107,14 @@ def show_map(lat, lon, fire_label, color):
         </div>
     """
     m.get_root().html.add_child(folium.Element(title_html))
-
-    # Show map
     st.markdown(
         """
         <style>
-            .map-container {margin-bottom:-40px;} /* reduce gap */
+            .map-container {margin-bottom:-40px;}
         </style>
         """,
         unsafe_allow_html=True,
     )
-
     with st.container():
         st_folium(m, width="100%", height=420, returned_objects=[])
         st.markdown(
@@ -112,9 +123,7 @@ def show_map(lat, lon, fire_label, color):
             unsafe_allow_html=True
         )
 
-# ----------------------------
-# Streamlit UI
-# ----------------------------
+# ------------------ UI ------------------
 st.set_page_config(page_title="🔥 Fire Type Classifier", layout="wide")
 st.title("🔥 Fire Type Classifier")
 st.markdown("Predict fire types using MODIS satellite readings and compare with real data.")
@@ -131,7 +140,7 @@ if scaler is None:
     st.error("Scaler missing")
     st.stop()
 
-# Sidebar
+# ------------------ SIDEBAR ------------------
 st.sidebar.title("⚙️ Controls")
 brightness = st.sidebar.slider("Brightness", 200.0, 500.0, 300.0)
 bright_t31 = st.sidebar.slider("Brightness T31", 250.0, 350.0, 290.0)
@@ -160,28 +169,18 @@ else:
 
 compare_real = st.sidebar.checkbox("📍 Compare with real fire data (2021–2023)", value=True)
 
+# ------------------ PREDICT BUTTON ------------------
 if st.button("🔍 Predict Fire Type"):
     if not (8.4 <= lat <= 37.6 and 68.7 <= lon <= 97.25):
-        st.error("❌ Coordinates outside India. Prediction allowed only within Indian territory.")
-        proceed = False
+        st.error("❌ Coordinates outside India.")
     else:
-        proceed = True
-
-    if proceed:
         confidence_val = confidence_map[confidence]
         X_input = np.array([[brightness, bright_t31, frp, scan, track, confidence_val]])
         X_scaled = scaler.transform(X_input)
         pred = model.predict(X_scaled)[0]
         label, color = fire_types.get(pred, ("Unknown", "gray"))
-
-        # Only convert to offshore if it's a vegetation fire AND the coordinates are actually over water
-        # India's southernmost point is about 8.4°N, so we'll use a slightly higher threshold
-        if label == "🌳 Vegetation Fire" and (lat <= 9.0 or lon >= 94.0):
-            # Additional check - only convert if it's actually over water
-            # This is a simple check - you might want to use a proper land/water mask
-            # or check against known water bodies' coordinates
-            label, color = fire_types[3]  # Offshore Fire
-
+        if label == "🌳 Vegetation Fire" and (lat <= 10.0 or lon >= 92.0):
+            label, color = fire_types[3]
         st.session_state.prediction = {
             "label": label,
             "color": color,
@@ -197,23 +196,33 @@ if st.button("🔍 Predict Fire Type"):
             }
         }
 
+# ------------------ RESULT DISPLAY ------------------
 if "prediction" in st.session_state:
     p = st.session_state.prediction
-    show_map(p["lat"], p["lon"], p["label"], p["color"])
     st.success(f"✅ Fire predicted at location: **{p['lat']:.4f}, {p['lon']:.4f}** — {p['label']}")
 
+    nearby_fires = pd.DataFrame()
     if compare_real:
-        st.subheader("🔎 Real Fire Events Nearby")
-        nearby_fires = find_closest_fire(df_all_years, p["lat"], p["lon"])
+        st.subheader("🔎 Real Fire Events Nearby (2021–2023)")
+        nearby_fires = find_closest_fire(df_all_years, p["lat"], p["lon"], model, scaler)
         if not nearby_fires.empty:
             st.dataframe(nearby_fires[[
                 "acq_date", "latitude", "longitude",
                 "brightness", "bright_t31", "frp",
-                "confidence", "type", "distance_km"
-            ]].head(5))
+                "confidence", "distance_km", "inferred_fire_type"
+            ]].head(5), use_container_width=True)
         else:
-            st.info("No recorded fire events within 20 km in 2021–2023.")
+            st.warning("No recorded fire events within 20 km.")
+            st.markdown("""
+                <div style="border: 1px dashed #ccc; padding: 20px; text-align: center; border-radius: 8px; background-color: #f9f9f9;">
+                    🔍 No nearby MODIS fire data found for this location and time period.
+                </div>
+            """, unsafe_allow_html=True)
 
+    if not nearby_fires.empty:
+        show_map(p["lat"], p["lon"], p["label"], p["color"])
+
+    # Download report
     result_df = pd.DataFrame([{
         "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         **p["inputs"],

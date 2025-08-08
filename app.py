@@ -16,18 +16,45 @@ SCALER_URL = "https://drive.google.com/uc?id=18FjzK0oepVCJ43hUOuXK79bzUEY6bOk_"
 MODEL_PATH = "best_fire_detection_model.pkl"
 SCALER_PATH = "scaler.pkl"
 
-# Load model and scaler from Google Drive
 @st.cache_resource
 def load_model():
     if not os.path.exists(MODEL_PATH):
-        gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
-        return joblib.load(MODEL_PATH)
+        try:
+            with st.spinner("📦 Downloading model from Google Drive..."):
+                gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+            st.sidebar.success("✅ Model downloaded")
+        except Exception as e:
+            st.sidebar.error(f"❌ Download failed: {e}")
+            return None
+
+    try:
+        st.sidebar.info("📂 Loading model file...")
+        model = joblib.load(MODEL_PATH)
+        st.sidebar.success("✅ Model loaded successfully")
+        return model
+    except Exception as e:
+        st.sidebar.error(f"❌ Failed to load model: {e}")
+        return None
 
 @st.cache_resource
 def load_scaler():
     if not os.path.exists(SCALER_PATH):
-        gdown.download(SCALER_URL, SCALER_PATH, quiet=False)
-        return joblib.load(SCALER_PATH)
+        try:
+            with st.spinner("📦 Downloading scaler from Google Drive..."):
+                gdown.download(SCALER_URL, SCALER_PATH, quiet=False)
+            st.sidebar.success("✅ Scaler downloaded")
+        except Exception as e:
+            st.sidebar.error(f"❌ Download failed: {e}")
+            return None
+
+    try:
+        st.sidebar.info("📂 Loading scaler file...")
+        scaler = joblib.load(SCALER_PATH)
+        st.sidebar.success("✅ Scaler loaded successfully")
+        return scaler
+    except Exception as e:
+        st.sidebar.error(f"❌ Failed to load scaler: {e}")
+        return None
 
 @st.cache_data
 def load_all_years():
@@ -75,7 +102,7 @@ def show_map(lat, lon, fire_label, color):
     folium.Marker([lat, lon], popup=f"{fire_label} at ({lat:.4f}, {lon:.4f})", icon=folium.Icon(color="red", icon="fire", prefix="fa")).add_to(m)
     folium.Circle([lat, lon], radius=50000, color=color, fill=True, fill_color=color, opacity=0.2).add_to(m)
     title_html = f"""
-        <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index:9999; background-color:{color}; color:white; padding:6px 16px; border-radius:8px; font-size:14px; font-weight:bold;">
+        <div style=\"position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index:9999; background-color:{color}; color:white; padding:6px 16px; border-radius:8px; font-size:14px; font-weight:bold;\">
             {fire_label}
         </div>"""
     m.get_root().html.add_child(folium.Element(title_html))
@@ -91,14 +118,11 @@ st.markdown("Predict fire types using MODIS satellite readings and compare with 
 model = load_model()
 scaler = load_scaler()
 
-# Show where the files came from
-st.toast("✅ Model loaded from " + ("disk cache" if os.path.exists(MODEL_PATH) else "Google Drive"))
-st.toast("✅ Scaler loaded from " + ("disk cache" if os.path.exists(SCALER_PATH) else "Google Drive"))
-df_all_years = load_all_years()
-
 if model is None or scaler is None:
     st.error("❌ Model or scaler could not be loaded. Prediction disabled.")
     st.stop()
+
+df_all_years = load_all_years()
 
 st.sidebar.title("⚙️ Controls")
 brightness = st.sidebar.slider("Brightness", 200.0, 500.0, 300.0)
@@ -153,7 +177,7 @@ if st.button("🔍 Predict Fire Type"):
         }
     }
 
-if "prediction" in st.session_state and (8.4 <= st.session_state.prediction["lat"] <= 37.6 and 68.7 <= st.session_state.prediction["lon"] <= 97.25):
+if "prediction" in st.session_state:
     p = st.session_state.prediction
     st.success(f"✅ Fire predicted at location: **{p['lat']:.4f}, {p['lon']:.4f}** — {p['label']}")
 
@@ -182,4 +206,4 @@ if "prediction" in st.session_state and (8.4 <= st.session_state.prediction["lat
     csv = result_df.to_csv(index=False).encode('utf-8')
     st.download_button("⬇️ Download Prediction Report", csv, "fire_prediction.csv", "text/csv")
 
-st.markdown("<div style='text-align: center; margin-top: 1em; color: gray'>🔥 Powered by MODIS & Streamlit | @ Gourav Barnwal</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; margin-top: 1em; color: gray'>🔥 Powered by MODIS & Streamlit</div>", unsafe_allow_html=True)

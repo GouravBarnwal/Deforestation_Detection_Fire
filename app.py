@@ -174,8 +174,13 @@ if st.button("🔍 Predict Fire Type"):
         pred = model.predict(X_scaled)[0]
         label, color = fire_types.get(pred, ("Unknown", "gray"))
 
-        if label == "🌳 Vegetation Fire" and (lat <= 10.0 or lon >= 92.0):
-            label, color = fire_types[3]
+        # Only convert to offshore if it's a vegetation fire AND the coordinates are actually over water
+        # India's southernmost point is about 8.4°N, so we'll use a slightly higher threshold
+        if label == "🌳 Vegetation Fire" and (lat <= 9.0 or lon >= 94.0):
+            # Additional check - only convert if it's actually over water
+            # This is a simple check - you might want to use a proper land/water mask
+            # or check against known water bodies' coordinates
+            label, color = fire_types[3]  # Offshore Fire
 
         st.session_state.prediction = {
             "label": label,

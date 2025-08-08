@@ -21,15 +21,13 @@ SCALER_PATH = "scaler.pkl"
 def load_model():
     if not os.path.exists(MODEL_PATH):
         gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
-    st.toast("✅ Model loaded from " + ("disk cache" if os.path.exists(MODEL_PATH) else "Google Drive"))
-    return joblib.load(MODEL_PATH)
+        return joblib.load(MODEL_PATH)
 
 @st.cache_resource
 def load_scaler():
     if not os.path.exists(SCALER_PATH):
         gdown.download(SCALER_URL, SCALER_PATH, quiet=False)
-    st.toast("✅ Scaler loaded from " + ("disk cache" if os.path.exists(SCALER_PATH) else "Google Drive"))
-    return joblib.load(SCALER_PATH)
+        return joblib.load(SCALER_PATH)
 
 @st.cache_data
 def load_all_years():
@@ -92,6 +90,10 @@ st.markdown("Predict fire types using MODIS satellite readings and compare with 
 
 model = load_model()
 scaler = load_scaler()
+
+# Show where the files came from
+st.toast("✅ Model loaded from " + ("disk cache" if os.path.exists(MODEL_PATH) else "Google Drive"))
+st.toast("✅ Scaler loaded from " + ("disk cache" if os.path.exists(SCALER_PATH) else "Google Drive"))
 df_all_years = load_all_years()
 
 if model is None or scaler is None:

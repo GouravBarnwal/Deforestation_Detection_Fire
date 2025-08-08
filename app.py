@@ -7,23 +7,46 @@ import folium
 from streamlit_folium import st_folium
 from sklearn.ensemble import RandomForestClassifier
 from geopy.distance import geodesic
+import os
+import gdown
 
-# ------------------ MODEL & SCALER LOAD ------------------
+# ------------------ Google Drive Links ------------------
+MODEL_URL = "https://drive.google.com/uc?id=1ZcohAUBMQTB9hG3YGYNedtxzDN_5cHZF"
+SCALER_URL = "https://drive.google.com/uc?id=18FjzK0oepVCJ43hUOuXK79bzUEY6bOk_"
+MODEL_PATH = "best_fire_detection_model.pkl"
+SCALER_PATH = "scaler.pkl"
+
+# ------------------ Load model and scaler ------------------
 @st.cache_resource
 def load_model():
+    if not os.path.exists(MODEL_PATH):
+        try:
+            with st.spinner("📦 Downloading model from Google Drive..."):
+                gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+            st.sidebar.success("✅ Model downloaded")
+        except Exception as e:
+            st.sidebar.error(f"❌ Failed to download model: {e}")
+            return None
     try:
-        model = joblib.load("best_fire_detection_model.pkl")
-        st.session_state.model_loaded = True
-        return model
-    except FileNotFoundError:
-        st.session_state.model_loaded = False
+        return joblib.load(MODEL_PATH)
+    except Exception as e:
+        st.sidebar.error(f"❌ Failed to load model: {e}")
         return None
 
 @st.cache_resource
 def load_scaler():
+    if not os.path.exists(SCALER_PATH):
+        try:
+            with st.spinner("📦 Downloading scaler from Google Drive..."):
+                gdown.download(SCALER_URL, SCALER_PATH, quiet=False)
+            st.sidebar.success("✅ Scaler downloaded")
+        except Exception as e:
+            st.sidebar.error(f"❌ Failed to download scaler: {e}")
+            return None
     try:
-        return joblib.load("scaler.pkl")
-    except FileNotFoundError:
+        return joblib.load(SCALER_PATH)
+    except Exception as e:
+        st.sidebar.error(f"❌ Failed to load scaler: {e}")
         return None
 
 @st.cache_data
@@ -35,7 +58,7 @@ def load_all_years():
     df.dropna(subset=["latitude", "longitude"], inplace=True)
     return df
 
-# ------------------ FIRE TYPE MAP ------------------
+# ------------------ Fire types ------------------
 fire_types = {
     0: ("🌳 Vegetation Fire", "#28a745"),
     1: ("🔥 Industrial/Urban Fire", "#ffc107"),
@@ -44,7 +67,6 @@ fire_types = {
 }
 confidence_map = {"low": 0, "nominal": 1, "high": 2}
 
-# ------------------ REAL FIRE TYPE INFERENCE ------------------
 def infer_fire_type_from_row(row, model, scaler):
     try:
         X = np.array([[
@@ -81,7 +103,6 @@ def find_closest_fire(df, lat, lon, model=None, scaler=None, radius_km=20):
         )
     return nearby
 
-# ------------------ MAP DISPLAY ------------------
 def show_map(lat, lon, fire_label, color):
     m = folium.Map(location=[lat, lon], zoom_start=6)
     folium.Marker(
@@ -123,7 +144,7 @@ def show_map(lat, lon, fire_label, color):
             unsafe_allow_html=True
         )
 
-# ------------------ UI ------------------
+# ------------------ Streamlit UI ------------------
 st.set_page_config(page_title="🔥 Fire Type Classifier", layout="wide")
 st.title("🔥 Fire Type Classifier")
 st.markdown("Predict fire types using MODIS satellite readings and compare with real data.")
@@ -132,15 +153,11 @@ model = load_model()
 scaler = load_scaler()
 df_all_years = load_all_years()
 
-if model is None:
-    model = RandomForestClassifier()
-    model.fit(np.random.rand(10, 6), np.random.randint(0, 4, 10))
-    st.warning("Using placeholder model")
-if scaler is None:
-    st.error("Scaler missing")
+if model is None or scaler is None:
+    st.error("❌ Model or scaler could not be loaded. Prediction disabled.")
     st.stop()
 
-# ------------------ SIDEBAR ------------------
+# ------------------ Sidebar UI ------------------
 st.sidebar.title("⚙️ Controls")
 brightness = st.sidebar.slider("Brightness", 200.0, 500.0, 300.0)
 bright_t31 = st.sidebar.slider("Brightness T31", 250.0, 350.0, 290.0)
@@ -169,7 +186,7 @@ else:
 
 compare_real = st.sidebar.checkbox("📍 Compare with real fire data (2021–2023)", value=True)
 
-# ------------------ PREDICT BUTTON ------------------
+# ------------------ Prediction ------------------
 if st.button("🔍 Predict Fire Type"):
     if not (8.4 <= lat <= 37.6 and 68.7 <= lon <= 97.25):
         st.error("❌ Coordinates outside India.")
@@ -196,7 +213,7 @@ if st.button("🔍 Predict Fire Type"):
             }
         }
 
-# ------------------ RESULT DISPLAY ------------------
+# ------------------ Result display ------------------
 if "prediction" in st.session_state:
     p = st.session_state.prediction
     st.success(f"✅ Fire predicted at location: **{p['lat']:.4f}, {p['lon']:.4f}** — {p['label']}")
@@ -222,7 +239,6 @@ if "prediction" in st.session_state:
     if not nearby_fires.empty:
         show_map(p["lat"], p["lon"], p["label"], p["color"])
 
-    # Download report
     result_df = pd.DataFrame([{
         "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         **p["inputs"],

@@ -9,4 +9,5 @@ streamlit-folium>=0.25.0
 gitpython>=3.1.45
 openpyxl>=3.1.5
 geopy>=2.4.1
+gdown>=5.1.0
 --find-links https://download.pytorch.org/whl/torch_stable.html

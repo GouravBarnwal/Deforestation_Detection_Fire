@@ -21,12 +21,14 @@ SCALER_PATH = "scaler.pkl"
 def load_model():
     if not os.path.exists(MODEL_PATH):
         gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+    st.toast("✅ Model loaded from " + ("disk cache" if os.path.exists(MODEL_PATH) else "Google Drive"))
     return joblib.load(MODEL_PATH)
 
 @st.cache_resource
 def load_scaler():
     if not os.path.exists(SCALER_PATH):
         gdown.download(SCALER_URL, SCALER_PATH, quiet=False)
+    st.toast("✅ Scaler loaded from " + ("disk cache" if os.path.exists(SCALER_PATH) else "Google Drive"))
     return joblib.load(SCALER_PATH)
 
 @st.cache_data
@@ -178,4 +180,4 @@ if "prediction" in st.session_state:
     csv = result_df.to_csv(index=False).encode('utf-8')
     st.download_button("⬇️ Download Prediction Report", csv, "fire_prediction.csv", "text/csv")
 
-st.markdown("<div style='text-align: center; margin-top: 1em; color: gray'>🔥 Powered by MODIS & Streamlit | @ Gourav Barnwal </div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; margin-top: 1em; color: gray'>🔥 Powered by MODIS & Streamlit</div>", unsafe_allow_html=True)

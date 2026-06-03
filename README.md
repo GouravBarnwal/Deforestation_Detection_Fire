@@ -91,7 +91,7 @@ streamlit run app.py
 
 > **Note:** `best_fire_detection_model.pkl` is 439 MB — too large for GitHub.
 > The app auto-downloads it from Google Drive on first launch.
-> To download manually: [Google Drive Link](https://drive.google.com/drive/folders/1w2fvB54FvNihaIXJABpRGmffVX5vYCH0?usp=sharing)
+> To download manually: [Google Drive Link](https://drive.google.com/file/d/1JvbfPY6bq4HD4oOVyCUEMoya--eSB7Qd/view?usp=drive_link)
 
 ---
 
